@@ -1,0 +1,178 @@
+// Modelo de dados da plataforma de eventos e bonificações.
+// Uma Bonificacao é cadastrada uma vez; ItemAberto são os produtos abertos para ela
+// (DG ou Ponto Bees) e Recebimento são as linhas de NF que chegaram e foram vinculadas.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Papel {
+  ADMIN
+  USUARIO
+}
+
+enum TipoPagamento {
+  DG
+  PONTO_BEES
+  DEPOSITO
+}
+
+// Listas usadas nos formulários (áreas, donos, alocações...).
+enum TipoOpcao {
+  AREA_ARMAZEM
+  AREA_AMBEV
+  SUBAREA_AMBEV
+  DONO_ARMAZEM
+  DONO_AMBEV
+  ALOCACAO
+}
+
+model Usuario {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  nome      String
+  senhaHash String
+  papel     Papel    @default(USUARIO)
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+}
+
+model Opcao {
+  id    Int       @id @default(autoincrement())
+  tipo  TipoOpcao
+  valor String
+  ativo Boolean   @default(true)
+
+  @@unique([tipo, valor])
+}
+
+model Loja {
+  codigo     String  @id // "001"
+  nome       String // "Ribeirão Preto Full"
+  cnpjAntigo String?
+  cnpjNovo   String?
+  regiao     String?
+  regional   String?
+  pdvAmbev   String?
+
+  itens        ItemAberto[]
+  recebimentos Recebimento[]
+}
+
+model Produto {
+  codigo        String    @id // código Armazém, "000018"
+  codigoAmbev   String?
+  descricao     String
+  nomeAmbev     String?
+  pack          String?
+  unidadesCaixa Int?
+  ttv           Decimal?  @db.Decimal(14, 6)
+  ttvAtualizado DateTime?
+
+  itens        ItemAberto[]
+  recebimentos Recebimento[]
+}
+
+model Bonificacao {
+  id              Int           @id @default(autoincrement())
+  numero          Int           @unique // 213 -> IDENT_BONI_213
+  dataSolicitacao DateTime      @db.Date
+  dataEvento      DateTime?     @db.Date
+  areaArmazem     String
+  areaAmbev       String?
+  subareaAmbev    String?
+  donoArmazem     String?
+  donoAmbev       String?
+  referencia      String
+  tipoPagamento   TipoPagamento
+  valorAbrir      Decimal       @db.Decimal(14, 2)
+  observacao      String?
+  // Quando preenchido, prevalece sobre o status calculado (ex.: "Finalizado" acertado com a Ambev).
+  statusManual    String?
+  criadoPor       String?
+  criadoEm        DateTime      @default(now())
+  atualizadoEm    DateTime      @updatedAt
+
+  itens        ItemAberto[]
+  recebimentos Recebimento[]
+}
+
+model ItemAberto {
+  id             Int       @id @default(autoincrement())
+  bonificacaoId  Int
+  lojaCodigo     String?
+  produtoCodigo  String?
+  descricao      String? // descrição como veio da planilha
+  caixas         Decimal?  @db.Decimal(14, 3)
+  unidadesCaixa  Int?
+  unidades       Decimal?  @db.Decimal(14, 3)
+  ttv            Decimal?  @db.Decimal(14, 6)
+  total          Decimal?  @db.Decimal(14, 2)
+  pontos         Decimal?  @db.Decimal(16, 2)
+  pedidoBees     String?
+  dataEntrega    DateTime? @db.Date
+  statusEntrega  String?
+  observacao     String?
+  // Campos do DG que não são usados nos cálculos: Cod Cia, OP, PDV, CDD.
+  extras         Json?
+  criadoEm       DateTime  @default(now())
+
+  bonificacao Bonificacao @relation(fields: [bonificacaoId], references: [id], onDelete: Cascade)
+  loja        Loja?       @relation(fields: [lojaCodigo], references: [codigo])
+  produto     Produto?    @relation(fields: [produtoCodigo], references: [codigo])
+
+  @@index([bonificacaoId])
+  @@index([pedidoBees])
+}
+
+model Recebimento {
+  id            Int       @id @default(autoincrement())
+  // Chave para não importar a mesma linha de NF duas vezes.
+  chave         String    @unique
+  nf            String
+  emissao       DateTime? @db.Date
+  dataAceite    DateTime? @db.Date
+  mesAlocacao   DateTime? @db.Date
+  lojaCodigo    String?
+  lojaNome      String?
+  fornecedor    String?
+  operacao      String?
+  produtoCodigo String?
+  descricao     String?
+  quantidade    Decimal   @db.Decimal(14, 3)
+  valorUnitario Decimal?  @db.Decimal(14, 6)
+  valorTotal    Decimal   @db.Decimal(14, 2)
+  ttvVigente    Decimal?  @db.Decimal(14, 6)
+  // "TOTAL R$" da planilha: quantidade × tabela vigente. É o valor que abate a bonificação.
+  valorTabela   Decimal?  @db.Decimal(14, 2)
+  alocacao      String? // Comercial, Eventos, Franquias, Crédito Armazem...
+  referencia    String?
+  pedidoBees    String?
+  observacao    String?
+  bonificacaoId Int?
+  // Identificação que veio na planilha mas não existe no sistema (ex.: bonis de 2025).
+  identOriginal String?
+  associadoPor  String?
+  associadoEm   DateTime?
+  origem        String? // arquivo de onde veio
+  criadoEm      DateTime  @default(now())
+
+  bonificacao Bonificacao? @relation(fields: [bonificacaoId], references: [id], onDelete: SetNull)
+  loja        Loja?        @relation(fields: [lojaCodigo], references: [codigo])
+  produto     Produto?     @relation(fields: [produtoCodigo], references: [codigo])
+
+  @@index([bonificacaoId])
+  @@index([pedidoBees])
+  @@index([nf])
+}
+
+model Configuracao {
+  chave String @id
+  valor String
+}

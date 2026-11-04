@@ -1,0 +1,13 @@
+node_modules/
+.next/
+.env
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+# Dados da empresa nunca entram no repositório
+dados/
+*.xlsx
+*.xlsm
+*.csv
+!public/modelos/*.xlsx
+__pycache__/
