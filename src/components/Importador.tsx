@@ -71,7 +71,10 @@ export function Importador({ tipo, bonificacaoId, modelo }: { tipo: TipoImportac
                 {res.linhas.map((l) => (
                   <tr key={l.linha} className={COR[l.status]}>
                     <td>{l.linha}</td>
-                    {colunas.map((c) => <td key={c}>{l.dados[c] ?? ""}</td>)}
+                    {colunas.map((c) => {
+                      const v = l.dados[c];
+                      return <td key={c} className={typeof v === "number" ? "num" : ""}>{typeof v === "number" ? v.toLocaleString("pt-BR", { maximumFractionDigits: 4 }) : (v ?? "")}</td>;
+                    })}
                     <td className="text-xs">{l.mensagem}</td>
                   </tr>
                 ))}
